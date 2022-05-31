@@ -35,3 +35,5 @@ pip3 install -r requirements.txt
 ![이미지](https://github.com/uichan8/CV_assignments/blob/main/hw3/code/results_webpage/confusion_matrix.png)
       
 ### 과제 4 : DNN model(with pytorch)
+1. numpy를 이용한 one layer 의 신경망 구성
+2. pytorch를 이용하여 lenet5, 유사 resnet 구현
