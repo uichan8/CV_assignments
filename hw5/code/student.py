@@ -48,16 +48,16 @@ def get_integral_imgaes(imgs):
                    where m = number of images and h, w are width and height of images
     """
     ### your code here ###
-    # iimgs = np.zeros([imgs.shape[0],imgs.shape[1]+1,imgs.shape[2]+1])
-    # iimgs[:,1,1] = imgs[:,0,0]
+    iimgs = np.zeros([imgs.shape[0],imgs.shape[1]+1,imgs.shape[2]+1])
+    iimgs[:,1,1] = imgs[:,0,0]
 
-    # for i in range(imgs.shape[1]):
-    #     for j in range(imgs.shape[2]):
-    #         iimgs[:,i+1,j+1] = imgs[:,i,j] + iimgs[:,i,j+1] + iimgs[:,i+1,j] - iimgs[:,i,j]
+    for i in range(imgs.shape[1]):
+        for j in range(imgs.shape[2]):
+            iimgs[:,i+1,j+1] = imgs[:,i,j] + iimgs[:,i,j+1] + iimgs[:,i+1,j] - iimgs[:,i,j]
 
-    # iimgs = iimgs[:,1:,1:]
-    # return integral images
-    iimgs = np.cumsum(np.cumsum(imgs, axis=1), axis=2)
+    iimgs = iimgs[:,1:,1:]
+    #return integral images
+    # iimgs = np.cumsum(np.cumsum(imgs, axis=1), axis=2)
     return iimgs
 
 def get_feature_pos_sz_2h(hlf_sz):
@@ -74,7 +74,7 @@ def get_feature_pos_sz_2h(hlf_sz):
         for j in range(img_w):
             for k in range(i+1,img_h):
                 for l in range(j+1,img_w):
-                    if (i-k)%2 == 0 and (l-j) > 4 and (k-i)>4:
+                    if (l-j)%2 == 0 and (l-j) >= 4 and (k-i)>=4:
                         ps.append([i,j,k-i,l-j])
     ps = np.array(ps)
     return ps
@@ -93,7 +93,7 @@ def get_feature_pos_sz_2v(hlf_sz):
         for j in range(img_w):
             for k in range(i+1,img_h):
                 for l in range(j+1,img_w):
-                    if (j-l)%2 == 0 and (l-j) > 4 and (k-i)>4:
+                    if (i-k)%2 == 0 and (l-j) >= 4 and (k-i)>=4:
                         ps.append([i,j,k-i,l-j])
     ps = np.array(ps)
     return ps
@@ -112,7 +112,7 @@ def get_feature_pos_sz_3h(hlf_sz):
         for j in range(img_w):
             for k in range(i+1,img_h):
                 for l in range(j+1,img_w):
-                    if (i-k)%3 == 0 and (l-j) > 4 and (k-i)>4:
+                    if (j-l)%3 == 0 and (l-j) >= 4 and (k-i)>=4:
                         ps.append([i,j,k-i,l-j])
     ps = np.array(ps)
     return ps
@@ -131,7 +131,7 @@ def get_feature_pos_sz_3v(hlf_sz):
         for j in range(img_w):
             for k in range(i+1,img_h):
                 for l in range(j+1,img_w):
-                    if (j-l)%3 == 0 and (l-j) > 4 and (k-i)>4:
+                    if (i-k)%3 == 0 and (l-j) >= 4 and (k-i)>=4:
                         ps.append([i,j,k-i,l-j])
     ps = np.array(ps)
     return ps
@@ -150,7 +150,7 @@ def get_feature_pos_sz_4(hlf_sz):
         for j in range(img_w):
             for k in range(i+1,img_h):
                 for l in range(j+1,img_w):
-                    if (i-k)%2 == 0 and (j-l)%2 == 0 and (l-j) > 4 and (k-i)>4:
+                    if (i-k)%2 == 0 and (j-l)%2 == 0 and (l-j) >= 4 and (k-i)>=4:
                         ps.append([i,j,k-i,l-j])
     ps = np.array(ps)
     return ps
@@ -167,22 +167,41 @@ def compute_features_2h(ps, iimg):
     iimg = np.pad(iimg, ((0,0),(1,0),(1,0)), 'constant',constant_values=0)
 
     x1 = ps[:,0]
-    x2 = ps[:,0]+ps[:,2]//2
-    x3 = ps[:,0]+ps[:,2]
+    x2 = ps[:,0]+ps[:,2]
 
     y1 = ps[:,1]
-    y2 = ps[:,1]+ps[:,3]
-    
+    y2 = ps[:,1]+ps[:,3]//2
+    y3 = ps[:,1]+ps[:,3]
+
     feats = np.zeros([iimg.shape[0],ps.shape[0]])
-    # x1,y1,x2,y2
-    feats -= iimg[:,x1,y1] - iimg[:,x2+1,y1] - iimg[:,x1,y2+1] + iimg[:,x2+1,y2+1]
-
-    # x2,y1,x3,y3
-    feats += iimg[:,x2,y1] - iimg[:,x3+1,y1] - iimg[:,x2,y2+1] + iimg[:,x3+1,y2+1]
-
+    
+    feats -= iimg[:,x1,y1] - iimg[:,x2,y1] - iimg[:,x1,y2] + iimg[:,x2,y2]
+    feats += iimg[:,x1,y2] - iimg[:,x2,y2] - iimg[:,x1,y3] + iimg[:,x2,y3]
 
     return feats
 
+def test_compute_features_2h(ps, img):
+    rfeature = []
+    for i in range(ps.shape[0]):
+        x,y,h,w = ps[i]
+
+        if w % 2 != 0:
+            print("wrong")
+
+        x1 = x
+        x2 = x+h
+
+        y1 = y
+        y2 = y+w//2
+        y3 = y+w
+        
+        feature = np.zeros_like(img[0])
+        feature[x1:x2,y1:y2] = -1
+        feature[x1:x2,y2:y3] = 1
+        feature = feature.reshape([1,feature.shape[0],feature.shape[1]])
+        rfeature.append((img*feature).sum(axis=(1,2)))
+    rfeature = np.array(rfeature)
+    return rfeature.T
 
 def compute_features_2v(ps, iimg):
     """
@@ -196,58 +215,44 @@ def compute_features_2v(ps, iimg):
     iimg = np.pad(iimg, ((0,0),(1,0),(1,0)), 'constant',constant_values=0)
 
     x1 = ps[:,0]
-    x2 = ps[:,0]+ps[:,2]
+    x2 = ps[:,0]+ps[:,2]//2
+    x3 = ps[:,0]+ps[:,2]
 
     y1 = ps[:,1]
-    y2 = ps[:,1]+ps[:,3]//2
-    y3 = ps[:,1]+ps[:,3]
-
+    y2 = ps[:,1]+ps[:,3]
+    
     feats = np.zeros([iimg.shape[0],ps.shape[0]])
-    # x1,y1,x2,y2
-    feats -= iimg[:,x1,y1] - iimg[:,x2+1,y1] - iimg[:,x1,y2+1] + iimg[:,x2+1,y2+1]
 
-    # x1,y2,x2,y3
-    feats += iimg[:,x1,y2] - iimg[:,x2+1,y2] - iimg[:,x1,y3+1] + iimg[:,x2+1,y3+1]
-
+    feats -= iimg[:,x1,y1] - iimg[:,x1,y2] - iimg[:,x2,y1] + iimg[:,x2,y2]
+    feats += iimg[:,x2,y1] - iimg[:,x2,y2] - iimg[:,x3,y1] + iimg[:,x3,y2]
     return feats
 
+def test_compute_features_2v(ps, img):
+    rfeature = []
+    for i in range(ps.shape[0]):
+        x,y,h,w = ps[i]
+
+        if h % 2 != 0:
+            print("wrong")
+
+        x1 = x
+        x2 = x+h//2
+        x3 = x+h
+
+        y1 = y
+        y2 = y+w
+        
+        feature = np.zeros_like(img[0])
+        feature[x1:x2,y1:y2] = -1
+        feature[x2:x3,y1:y2] = 1
+        feature = feature.reshape([1,feature.shape[0],feature.shape[1]])
+        rfeature.append((img*feature).sum(axis=(1,2)))
+    rfeature = np.array(rfeature)
+    return rfeature.T
 
 def compute_features_3h(ps, iimg):
     """
     Compute all positions and sizes of type 3h haar-like-features
-    :param ps: an ndarray of all positions x,y and sizes w,h [x,y,w,h] of shape (n_feat x 4)
-    :param iimg: an ndarray of integral images of shape (n_img, h_img, w_img)
-
-    :return feats: an ndarray of shape (n_img, n_feat) haar-like feature values for input images
-    """
-    ### your code here ###
-    iimg = np.pad(iimg, ((0,0),(1,0),(1,0)), 'constant',constant_values=0)
-
-    x1 = ps[:,0]
-    x2 = ps[:,0]+ps[:,2]//3
-    x3 = ps[:,0]+ps[:,2]*2//3
-    x4 = ps[:,0]+ps[:,2]
-
-    y1 = ps[:,1]
-    y2 = ps[:,1]+ps[:,3]
-
-    feats = np.zeros([iimg.shape[0],ps.shape[0]])
-    # x1,y1,x2,y2
-    feats -= iimg[:,x1,y1] - iimg[:,x2+1,y1] - iimg[:,x1,y2+1] + iimg[:,x2+1,y2+1]
-
-    # x2,y1,x3,y2
-    feats += iimg[:,x2,y1] - iimg[:,x3+1,y1] - iimg[:,x2,y2+1] + iimg[:,x3+1,y2+1]
-
-    # x3,y1,x4,y2
-    feats -= iimg[:,x3,y1] - iimg[:,x4+1,y1] - iimg[:,x3,y2+1] + iimg[:,x4+1,y2+1]
-
-    feats
-    return feats
-
-
-def compute_features_3v(ps, iimg):
-    """
-    Compute all positions and sizes of type 3v haar-like-features
     :param ps: an ndarray of all positions x,y and sizes w,h [x,y,w,h] of shape (n_feat x 4)
     :param iimg: an ndarray of integral images of shape (n_img, h_img, w_img)
 
@@ -265,16 +270,91 @@ def compute_features_3v(ps, iimg):
     y4 = ps[:,1]+ps[:,3]
 
     feats = np.zeros([iimg.shape[0],ps.shape[0]])
-    # x1,y1,x2,y2
-    feats -= iimg[:,x1,y1] - iimg[:,x2+1,y1] - iimg[:,x1,y2+1] + iimg[:,x2+1,y2+1]
+    
+    feats -= iimg[:,x1,y1] - iimg[:,x2,y1] - iimg[:,x1,y2] + iimg[:,x2,y2]
+    feats += iimg[:,x1,y2] - iimg[:,x2,y2] - iimg[:,x1,y3] + iimg[:,x2,y3]
+    feats -= iimg[:,x1,y3] - iimg[:,x2,y3] - iimg[:,x1,y4] + iimg[:,x2,y4]
 
-    # x1,y2,x2,y3
-    feats += iimg[:,x1,y2] - iimg[:,x2+1,y2] - iimg[:,x1,y3+1] + iimg[:,x2+1,y3+1]
-
-    # x1,y3,x2,y4
-    feats -= iimg[:,x1,y3] - iimg[:,x2+1,y3] - iimg[:,x1,y4+1] + iimg[:,x2+1,y4+1]
+    feats
     return feats
 
+def test_compute_features_3h(ps, img):
+    rfeature = []
+    for i in range(ps.shape[0]):
+        x,y,h,w = ps[i]
+
+        if w % 3 != 0:
+            print("wrong")
+
+        x1 = x
+        x2 = x+h
+
+        y1 = y
+        y2 = y+w//3
+        y3 = y+w*2//3
+        y4 = y+w
+        
+        feature = np.zeros_like(img[0])
+        feature[x1:x2,y1:y2] = -1
+        feature[x1:x2,y2:y3] = 1
+        feature[x1:x2,y3:y4] = -1
+
+        feature = feature.reshape([1,feature.shape[0],feature.shape[1]])
+        rfeature.append((img*feature).sum(axis=(1,2)))
+    rfeature = np.array(rfeature)
+    return rfeature.T
+
+def compute_features_3v(ps, iimg):
+    """
+    Compute all positions and sizes of type 3v haar-like-features
+    :param ps: an ndarray of all positions x,y and sizes w,h [x,y,w,h] of shape (n_feat x 4)
+    :param iimg: an ndarray of integral images of shape (n_img, h_img, w_img)
+
+    :return feats: an ndarray of shape (n_img, n_feat) haar-like feature values for input images
+    """
+    ### your code here ###
+    iimg = np.pad(iimg, ((0,0),(1,0),(1,0)), 'constant',constant_values=0)
+
+    x1 = ps[:,0]
+    x2 = ps[:,0]+ps[:,2]//3
+    x3 = ps[:,0]+ps[:,2]*2//3
+    x4 = ps[:,0]+ps[:,2]
+
+    y1 = ps[:,1]
+    y2 = ps[:,1]+ps[:,3]
+
+    feats = np.zeros([iimg.shape[0],ps.shape[0]])
+    
+    feats -= iimg[:,x1,y1] - iimg[:,x2,y1] - iimg[:,x1,y2] + iimg[:,x2,y2]
+    feats += iimg[:,x2,y1] - iimg[:,x3,y1] - iimg[:,x2,y2] + iimg[:,x3,y2]
+    feats -= iimg[:,x3,y1] - iimg[:,x4,y1] - iimg[:,x3,y2] + iimg[:,x4,y2]
+    return feats
+
+def test_compute_features_3v(ps, img):
+    rfeature = []
+    for i in range(ps.shape[0]):
+        x,y,h,w = ps[i]
+
+        if h % 3 != 0:
+            print("wrong")
+
+        x1 = x
+        x2 = x+h//3
+        x3 = x+h*2//3
+        x4 = x+h
+
+        y1 = y
+        y2 = y+w
+        
+        feature = np.zeros_like(img[0])
+        feature[x1:x2,y1:y2] = -1
+        feature[x2:x3,y1:y2] = 1
+        feature[x3:x4,y1:y2] = -1
+
+        feature = feature.reshape([1,feature.shape[0],feature.shape[1]])
+        rfeature.append((img*feature).sum(axis=(1,2)))
+    rfeature = np.array(rfeature)
+    return rfeature.T
 
 def compute_features_4(ps, iimg):
     """
@@ -296,19 +376,38 @@ def compute_features_4(ps, iimg):
     y3 = ps[:,1]+ps[:,3]
 
     feats = np.zeros([iimg.shape[0],ps.shape[0]])
-    # x1,y1,x2,y2
-    feats -= iimg[:,x1,y1] - iimg[:,x2+1,y1] - iimg[:,x1,y2+1] + iimg[:,x2+1,y2+1]
-
-    # x2,y1,x3,y2
-    feats += iimg[:,x2,y1] - iimg[:,x3+1,y1] - iimg[:,x2,y2+1] + iimg[:,x3+1,y2+1]
-
-    # x1,y2,x2,y3
-    feats += iimg[:,x1,y2] - iimg[:,x2+1,y2] - iimg[:,x1,y3+1] + iimg[:,x2+1,y3+1]
-
-    # x2,y2,x3,y3
-    feats -= iimg[:,x2,y2] - iimg[:,x3+1,y2] - iimg[:,x2,y3+1] + iimg[:,x3+1,y3+1]
+    feats -= iimg[:,x1,y1] - iimg[:,x2,y1] - iimg[:,x1,y2] + iimg[:,x2,y2]
+    feats += iimg[:,x2,y1] - iimg[:,x3,y1] - iimg[:,x2,y2] + iimg[:,x3,y2]
+    feats += iimg[:,x1,y2] - iimg[:,x2,y2] - iimg[:,x1,y3] + iimg[:,x2,y3]
+    feats -= iimg[:,x2,y2] - iimg[:,x3,y2] - iimg[:,x2,y3] + iimg[:,x3,y3]
     return feats
 
+def test_compute_features_4(ps, img):
+    rfeature = []
+    for i in range(ps.shape[0]):
+        x,y,h,w = ps[i]
+
+        if h % 2 != 0 or w % 2 != 0:
+            print("wrong")
+
+        x1 = x
+        x2 = x+h//2
+        x3 = x+h
+
+        y1 = y
+        y2 = y+w//2
+        y3 = y+w
+        
+        feature = np.zeros_like(img[0])
+        feature[x1:x2,y1:y2] = -1
+        feature[x2:x3,y1:y2] = 1
+        feature[x1:x2,y2:y3] = 1
+        feature[x2:x3,y2:y3] = -1
+
+        feature = feature.reshape([1,feature.shape[0],feature.shape[1]])
+        rfeature.append((img*feature).sum(axis=(1,2)))
+    rfeature = np.array(rfeature)
+    return rfeature.T
 
 def get_weak_classifiers(feats, labels, weights):
     """
@@ -335,7 +434,7 @@ def get_weak_classifiers(feats, labels, weights):
         grading = (predict == labels).astype(np.float32)
         acc = np.sum(grading, axis=0)/feats.shape[0]
         sign = ((acc > 0.5)-0.5)*2
-        grading = np.abs(grading - (sign==-1))
+        grading = np.abs(grading - (sign==-1).reshape(1,-1))
 
         grading = (1.-grading) * weights
         error = np.sum(grading, axis=0)
@@ -349,7 +448,7 @@ def get_weak_classifiers(feats, labels, weights):
 
 
 
-def visualize_haar_feature(hlf_sz, x,y,w,h,type):
+def visualize_haar_feature(x,y,w,h,type,hlf_sz =(18,18)):
     """
     Visualize haar-like feature
     :param hlf_sz: tuple (w, h) of size of haar-like feature box, 
@@ -358,8 +457,32 @@ def visualize_haar_feature(hlf_sz, x,y,w,h,type):
     :return hlf_img: image visualizing particular haar-like-feature
     """
     ### your code here ###
-    hlf_img = np.ones(hlf_sz)
+    img = np.zeros(hlf_sz)
+    if type == 0:
+        img[x:x+h,y:y+w//2] = -1
+        img[x:x+h,y+w//2:y+w] = 1
+
+    elif type == 1:
+        img[x:x+h//2,y:y+w] = -1
+        img[x+h//2:x+h,y:y+w] = 1
+
+    elif type == 2:
+        img[x:x+h,y:y+w//3] = -1
+        img[x:x+h,y+w//3:y+w*2//3] = 1
+        img[x:x+h,y+w*2//3:y+w] = -1
     
+    elif type == 3:
+        img[x:x+h//3,y:y+w] = -1
+        img[x+h//3:x+h*2//3,y:y+w] = 1
+        img[x+h*2//3:x+h,y:y+w] = -1
+    
+    elif type == 4:
+        img[x:x+h//2,y:y+w//2] = -1
+        img[x:x+h//2,y+w//2:y+w] = 1
+        img[x+h//2:x+h,y:y+w//2] = 1
+        img[x+h//2:x+h,y+w//2:y+w] = -1
+
+    hlf_img = img
     return hlf_img
 
 
@@ -394,13 +517,13 @@ if __name__ == "__main__":
     from skimage.color import rgb2gray
 
     ### size of haar_like_feature ###
-    hlf_sz = (24,24)
+    hlf_sz = (18,18)
 
     # load positve and negative datasetsi
     # positive data: size n_p x h x w, where n_p = number of positive images and h_i, w_i are width and height of images
-    data_pos = load_folder_imgs('../data/pos', hlf_sz)[:2000,:,:]
+    data_pos = load_folder_imgs('../data/pos', hlf_sz)[:1000,:,:]
     # negative data: size n_n x h x w, where n_n = number of negative images and h_i, w_i are width and height of images
-    data_neg = load_folder_imgs('../data/neg', hlf_sz)[:2000,:,:]
+    data_neg = load_folder_imgs('../data/neg', hlf_sz)[:1000,:,:]
 
     # concatenate all images
     n_p = data_pos.shape[0]
