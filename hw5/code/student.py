@@ -446,7 +446,14 @@ def get_weak_classifiers(feats, labels, weights):
 
     return thetas, signs, errors
 
+def get_best_weak_classifier(errors, num_feat_per_type, feat2h_ps, feat2v_ps, feat3h_ps, feat3v_ps, feat4_ps):
+    min_arg = np.argmin(errors)
+    feat_label = np.array([0]*num_feat_per_type[0] + [1]*num_feat_per_type[1] + [2]*num_feat_per_type[2] + [3]*num_feat_per_type[3] + [4]*num_feat_per_type[4])
+    h_type = feat_label[min_arg]
+    feat = np.vstack([feat2h_ps, feat2v_ps, feat3h_ps, feat3v_ps, feat4_ps])
+    h_x, h_y, h_h, h_w = feat[min_arg]
 
+    return h_x, h_y, h_w, h_h, h_type
 
 def visualize_haar_feature(x,y,w,h,type,hlf_sz =(18,18)):
     """
@@ -496,7 +503,12 @@ def overlay_haar_feature(hlf_sz, x,y,w,h,type, image):
     :return hlf_img: image visualizing particular haar-like-feature
     """
     ### your code here ###
-    hlf_img = np.ones(hlf_sz)
+    mask = visualize_haar_feature(x,y,w,h,type)
+    hlf_img = image
+    hlf_img /= hlf_img.max()
+    hlf_img[x:x+h,y:y+w] = 0
+    mask = 1.*(mask == 1)
+    hlf_img[x:x+h,y:y+w] += mask[x:x+h,y:y+w]
     return hlf_img
 
 if __name__ == "__main__":
