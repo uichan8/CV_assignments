@@ -31,7 +31,6 @@ def load_folder_imgs(folder_name, img_size):
         img = io.imread(path, as_gray=True)
         # resize images to tuple img_size
         img = resize(img, (img_size[0], img_size[1]), anti_aliasing=True)
-        img /= 255
         # add image to data
         data[i,:,:] = img
 
@@ -430,7 +429,7 @@ def get_weak_classifiers(feats, labels, weights):
     
     for i in tqdm(range(thr_list.shape[0])):
         theta = thr_list[i]
-        predict = feats>theta.reshape(1,-1)
+        predict = feats<theta.reshape(1,-1)
         grading = (predict == labels).astype(np.float32)
         acc = np.sum(grading, axis=0)/feats.shape[0]
         sign = ((acc > 0.5)-0.5)*2
@@ -492,7 +491,6 @@ def visualize_haar_feature(x,y,w,h,type,hlf_sz =(18,18)):
     hlf_img = img
     return hlf_img
 
-
 def overlay_haar_feature(hlf_sz, x,y,w,h,type, image):
     """
     Visualize haar-like feature
@@ -511,62 +509,200 @@ def overlay_haar_feature(hlf_sz, x,y,w,h,type, image):
     hlf_img[x:x+h,y:y+w] += mask[x:x+h,y:y+w]
     return hlf_img
 
-if __name__ == "__main__":
-    # Viola-Jones algorithm stencil code 
-    # Written by Soochahn Lee for Computer Vision @ Kookmin University
+class haar_weak_classifier:
+    """
+    class for haar-like feature-based weak classifier
+    :define class attributes(class variables) to include 
+      -position, size, type of Haar-like feature
+      -threshold and polarity
+    :define methods(class functions) as needed
+    """
+    def __init__(self,feature_mask, theta, weight, sign, h_x, h_y, h_w, h_h, h_type): # <-- add class attributes
+        self.feature_mask = feature_mask
+        self.theta = theta
+        self.weight = weight
+        self.sign = sign
+        self.h_x = h_x
+        self.h_y = h_y
+        self.h_w = h_w
+        self.h_h = h_h
+        self.h_type = h_type
 
-    import csv
-    import sys
-    import argparse
-    import numpy as np
-    import scipy.io as scio
+    # add class methods
+    ### YOUR CODE HERE ###
+    def forward(self, imgs):
+        feat = imgs * self.feature_mask[np.newaxis,:,:]
+        feat = feat.sum(axis=(1,2))
+        result = (feat*self.sign < self.theta*self.sign)*self.weight
+        return result
+    
+    def forward2(self,iimg):
+        if self.h_type == 0:
+            feat = compute_features_2h(np.array([[self.h_x,self.h_y,self.h_h,self.h_w]]),iimg)
+        elif self.h_type == 1:
+            feat = compute_features_2v(np.array([[self.h_x,self.h_y,self.h_h,self.h_w]]),iimg)
+        elif self.h_type == 2:
+            feat = compute_features_3h(np.array([[self.h_x,self.h_y,self.h_h,self.h_w]]),iimg)
+        elif self.h_type == 3:
+            feat = compute_features_3v(np.array([[self.h_x,self.h_y,self.h_h,self.h_w]]),iimg)
+        elif self.h_type == 4:
+            feat = compute_features_4(np.array([[self.h_x,self.h_y,self.h_h,self.h_w]]),iimg)
+        
+        result = ((feat*self.sign < self.theta*self.sign)-0.5)*2*self.weight
+        return result
 
-    import matplotlib
-    import matplotlib.pyplot as plt
+    
 
-    from skimage import io, filters, feature, img_as_float32
-    from skimage.transform import rescale
-    from skimage.color import rgb2gray
+def get_strong_classifier(feat, labels, weights,
+                          num_feat_per_type, feat2h_ps, feat2v_ps, feat3h_ps, feat3v_ps, feat4_ps,
+                          num_weak_cls):
+    """
+    train strong classifier
+    :param feats: an ndarray of shape (n_img, n_feat) haar-like feature values for input images
+    :param labels: an ndarray of shape (n_img) with pos 1/neg 0 labels of all input imags
+    :param weights: an ndarray of shape (n_img) with weight values of all input imags 
+    :param num_feat_per_type: number of features per feature type
+    :param feat2h_ps, feat2v_ps, feat3h_ps, feat3v_ps, feat4_ps: ndarry of all positions and sizes of haar-like-features 
+    :param num_weak_cls: number of weak classifiers that comprise the strong classifier 
 
-    ### size of haar_like_feature ###
-    hlf_sz = (18,18)
+    :return hwc_list: list of haar-like feature based weak classifiers
+    """
+    hwc_list = []
+    ### YOUR CODE HERE ##
+    selected_classifiers = []
+    for i in range(num_weak_cls):
+        #Renormailize weights
+        weights /= weights.sum()
 
-    # load positve and negative datasetsi
-    # positive data: size n_p x h x w, where n_p = number of positive images and h_i, w_i are width and height of images
-    data_pos = load_folder_imgs('../data/pos', hlf_sz)[:1000,:,:]
-    # negative data: size n_n x h x w, where n_n = number of negative images and h_i, w_i are width and height of images
-    data_neg = load_folder_imgs('../data/neg', hlf_sz)[:1000,:,:]
+        #select best weak classifier
+        thetas, signs, errors = get_weak_classifiers(feat, labels, weights)
+        for i in selected_classifiers:
+            errors[i] = 1e10
 
-    # concatenate all images
-    n_p = data_pos.shape[0]
-    n_n = data_neg.shape[0]
-    data = np.row_stack([data_pos, data_neg])
-    # create ndarray to store positive/negative labels
-    labels = np.row_stack([np.ones([n_p,1]), np.zeros([n_n,1])])
-    weights = np.row_stack([np.ones([n_p,1]), np.ones([n_n,1])]).astype(np.float32)
+        h_x, h_y, h_w, h_h, h_type = get_best_weak_classifier(errors, num_feat_per_type, feat2h_ps, feat2v_ps, feat3h_ps, feat3v_ps, feat4_ps)
+        min_arg = np.argmin(errors)
+        selected_classifiers.append(min_arg)
+        classifier_threshold = thetas[min_arg]
+        classifier_sign = signs[min_arg]
+        feature_mask = visualize_haar_feature(h_x, h_y, h_w, h_h, h_type)
 
-    print(1)
-    iimgs = get_integral_imgaes(data)
+        #selected weak classifier forward
+        target_feature = feat[:,min_arg]
+        predict = (target_feature * classifier_sign < classifier_threshold * classifier_sign)  # h(x)
+        grading = (predict == labels.flatten()).astype(np.float32) #sigma
+        e_ij = (1 - grading)#e_ij
+        e_j = (weights.flatten() * e_ij).sum() #e_j
+        modified_error = e_j/(1-e_j) #beta
+        classifier_weight = -np.log(modified_error) #alpha
+        
+        #update weights
+        weights *= (modified_error ** (1 - e_ij)).reshape([-1,1])
 
-    # 1. 각 feature 종류마다 가능한 위치/크기 값 x, y, w, h을 shape = (개수 x 4)인 ndarray 형태로 도출하는 함수를 구현하시오.
-    print(2)
-    feat2h_ps = get_feature_pos_sz_2h(hlf_sz)
-    feat2v_ps = get_feature_pos_sz_2v(hlf_sz)
-    feat3h_ps = get_feature_pos_sz_3h(hlf_sz)
-    feat3v_ps = get_feature_pos_sz_3v(hlf_sz)
-    feat4_ps = get_feature_pos_sz_4(hlf_sz)
+        #add classifier
+        clasiifier = haar_weak_classifier(feature_mask, classifier_threshold, classifier_weight, classifier_sign, h_x, h_y, h_w, h_h, h_type)
+        hwc_list.append(clasiifier)
+    
+    return hwc_list
 
-    # 2. 각 feature 종류별로 feature 값을 모두 계산하는 함수를 구현하시오. 계산된 feature 값들은 shape (n_image x n_feat)의 ndarray 형태로 도출하시오.
-    print(3)
-    feat2h = compute_features_2h(feat2h_ps, iimgs)
-    feat2v = compute_features_2v(feat2v_ps ,iimgs)
-    feat3h = compute_features_3h(feat3h_ps ,iimgs)
-    feat3v = compute_features_3v(feat3v_ps ,iimgs)
-    feat4 = compute_features_4(feat4_ps ,iimgs)
 
-    feat = np.column_stack(([feat2h, feat2v, feat3h, feat3v, feat4]))
-    num_feat_per_type = [feat2h.shape[1], feat2v.shape[1], feat3h.shape[1], feat3v.shape[1], feat4.shape[1]]
+def apply_strong_classifier_training_iimgs(iimgs, hwc_list, thr = 0):
+    """
+    apply strong classifier to training images
+    :param iimgs: training set integral images 
 
-    print(4)
-    get_weak_classifiers(feat, labels, weights)
-    #thetas, signs, errors = get_weak_classifiers(feat, labels, weights)
+    :return cls_list: list of classification results (classification result = 1 if face, 0 if not)
+    """
+    ### YOUR CODE HERE ###
+    cls_list = []
+    for c in hwc_list:
+        result = c.forward2(iimgs)
+        cls_list.append(result)
+    cls_list = np.array(cls_list).sum(axis=0) > thr
+
+    return cls_list
+
+
+def get_classification_correctnet(labels, cls_list):
+    """
+    check correctness of classification results
+    :param labels: an ndarray of shape (n_img) with pos 1/neg 0 labels of all input imags 
+    :param cls_list: an ndarray of shape (n_img) with class estimatations
+
+    :return cls_list: list of True/False results for class estimation input
+    """
+    ### YOUR CODE HERE ###
+    correctness = (labels == cls_list)
+    return correctness
+
+def get_incorrect_images(data, correctness_list):
+    """
+    get incorrect images
+    :param data: an ndarray of images of size m x h x w, 
+                 where m = number of images and h, w are width and height of images 
+    :param correctness_list: list of True/False results for class estimation input
+
+    :return incorrect_imgs: an ndarray of images of size n x h x w, 
+                            where n = number of incorrect images and h, w are width and height of images 
+    """
+    ### YOUR CODE HERE ###
+    incorrect_imgs = data[~np.where(correctness_list)[0]]
+    return incorrect_imgs
+
+
+def get_sample_images(path = "example.jpg"):
+    """
+    :return img: image from path
+    """
+    ### YOUR CODE HERE ###
+    img = np.zeros([0,0])
+    img = io.imread("example.png", as_gray=True)
+    return img
+
+
+
+def detect_face(img, hwc_list, min_scale = 1.0, max_scale = 2.0, num_scales = 3, thr = 0):
+    """
+    face detection by multi-scale sliding window classification using strong classifier
+    :param img: input image
+    :param hwc_list: strong classifier compring list of haar-like feature based weak classifiers
+    
+    :return bboxs: list of bounding boxes of detected faces
+    """
+    ### YOUR CODE HERE ###
+    stride = 2
+    bboxes = []
+    scale_idx = np.arange(num_scales)
+    scales = scale_idx * (max_scale-min_scale)/num_scales + min_scale
+    for scale in scales:
+        s_img = resize(img, (int(img.shape[0]/scale), int(img.shape[1]/scale)), anti_aliasing=True)
+        all_bboxes = []
+        all_patches = []
+        for i in range(0,s_img.shape[0]-18,stride):
+            for j in range(0,s_img.shape[1]-18,stride):
+                all_patches.append(s_img[i:i+18,j:j+18])
+                all_bboxes.append([int(i*scale),int(j*scale),int(18*scale),int(18*scale)])
+        all_patches = np.array(all_patches)
+        iall_patches = get_integral_imgaes(all_patches)
+        result = apply_strong_classifier_training_iimgs(iall_patches, hwc_list, thr)
+        final_bbox = np.array(all_bboxes)[np.where(result)[0]]
+        bboxes.append(final_bbox)
+    bboxes = np.vstack(bboxes)
+    return bboxes
+
+
+def visualize_bboxes(img, bboxes):
+    """
+    Visualize bounding boxes
+    :param img: input image to overlay bounding boxes
+    :param bboxes: bounding boxes
+
+    :return bbox_img: image with overlayed bounding boxes
+    """
+    ### YOUR CODE HERE ###
+    for b in bboxes:
+        img[b[0]:b[0]+b[2],b[1]] = 1
+        img[b[0]:b[0]+b[2],b[1]+b[3]] = 1
+        img[b[0],b[1]:b[1]+b[3]] = 1
+        img[b[0]+b[2],b[1]:b[1]+b[3]] = 1
+    bbox_img = img
+    return bbox_img 
